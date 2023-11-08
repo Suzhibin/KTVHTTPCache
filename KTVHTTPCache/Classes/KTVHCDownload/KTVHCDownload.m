@@ -23,7 +23,7 @@ NSString * const KTVHCContentTypeBinaryOctetStream      = @"binary/octet-stream"
 
 @interface KTVHCDownload () <NSURLSessionDataDelegate, NSLocking>
 
-@property (nonatomic, strong) NSLock *coreLock;
+@property (nonatomic, strong) NSRecursiveLock *coreLock;
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) NSOperationQueue *sessionDelegateQueue;
 @property (nonatomic, strong) NSURLSessionConfiguration *sessionConfiguration;
@@ -50,6 +50,7 @@ NSString * const KTVHCContentTypeBinaryOctetStream      = @"binary/octet-stream"
 {
     if (self = [super init]) {
         KTVHCLogAlloc(self);
+        self.coreLock = [[NSRecursiveLock alloc] init];
         self.timeoutInterval = 30.0f;
         self.backgroundTask = UIBackgroundTaskInvalid;
         self.errorDictionary = [NSMutableDictionary dictionary];
@@ -117,8 +118,12 @@ NSString * const KTVHCContentTypeBinaryOctetStream      = @"binary/octet-stream"
         [mRequest setValue:obj forHTTPHeaderField:key];
     }];
     NSURLSessionDataTask *task = [self.session dataTaskWithRequest:mRequest];
-    [self.requestDictionary setObject:request forKey:task];
-    [self.delegateDictionary setObject:delegate forKey:task];
+    if(request){
+        [self.requestDictionary setObject:request forKey:task];
+    }
+    if (delegate) {
+        [self.delegateDictionary setObject:delegate forKey:task];
+    }
     task.priority = 1.0;
     [task resume];
     KTVHCLogDownload(@"%p, Add Request\nrequest : %@\nURL : %@\nheaders : %@\nHTTPRequest headers : %@\nCount : %d", self, request, request.URL, request.headers, mRequest.allHTTPHeaderFields, (int)self.delegateDictionary.count);
@@ -148,9 +153,21 @@ NSString * const KTVHCContentTypeBinaryOctetStream      = @"binary/octet-stream"
 {
     [self lock];
     KTVHCDataRequest *dataRequest = [self.requestDictionary objectForKey:task];
-    KTVHCDataResponse *dataResponse = [[KTVHCDataResponse alloc] initWithURL:dataRequest.URL headers:response.allHeaderFields];
-    KTVHCLogDownload(@"%p, Receive response\nrequest : %@\nresponse : %@\nHTTPResponse : %@", self, dataRequest, dataResponse, response.allHeaderFields);
     NSError *error = nil;
+    KTVHCDataResponse *dataResponse = nil;
+    if ([response isMemberOfClass:NSHTTPURLResponse.class]) { // NSHTTPURLResponse
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        dataResponse  = [[KTVHCDataResponse alloc] initWithURL:dataRequest.URL headers:httpResponse.allHeaderFields];
+        KTVHCLogDownload(@"%p, Receive response\nrequest : %@\nresponse : %@\nHTTPResponse : %@", self, dataRequest, dataResponse, httpResponse.allHeaderFields);
+        if (!error && httpResponse.statusCode > 400) {
+            error = [KTVHCError errorForResponseUnavailable:task.currentRequest.URL
+                                                    request:task.currentRequest
+                                                   response:task.response];
+        }
+    } else { // NSURLResponse
+        dataResponse  = [[KTVHCDataResponse alloc] initWithURL:dataRequest.URL headers:nil];
+    }
+   
     if (!error) {
         if (response.statusCode > 400) {
             error = [KTVHCError errorForResponseUnavailable:task.currentRequest.URL
@@ -233,9 +250,6 @@ NSString * const KTVHCContentTypeBinaryOctetStream      = @"binary/octet-stream"
 
 - (void)lock
 {
-    if (!self.coreLock) {
-        self.coreLock = [[NSLock alloc] init];
-    }
     [self.coreLock lock];
 }
 

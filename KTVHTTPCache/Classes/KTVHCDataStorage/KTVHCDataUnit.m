@@ -74,6 +74,7 @@
 
 - (void)commonInit
 {
+    self.coreLock = [[NSRecursiveLock alloc] init];
     KTVHCLogAlloc(self);
     [self lock];
     if (!self.unitItemsInternal) {
@@ -332,9 +333,6 @@
 
 - (void)lock
 {
-    if (!self.coreLock) {
-        self.coreLock = [[NSRecursiveLock alloc] init];
-    }
     [self.coreLock lock];
     if (!self.lockingUnitItems) {
         self.lockingUnitItems = [NSMutableArray array];

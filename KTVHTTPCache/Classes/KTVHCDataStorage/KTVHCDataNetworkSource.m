@@ -42,6 +42,7 @@
 {
     if (self = [super init])
     {
+        self.coreLock = [[NSLock alloc] init];
         KTVHCLogAlloc(self);
         self->_request = reqeust;
         self->_range = reqeust.range;
@@ -286,9 +287,6 @@
 
 - (void)lock
 {
-    if (!self.coreLock) {
-        self.coreLock = [[NSLock alloc] init];
-    }
     [self.coreLock lock];
 }
 

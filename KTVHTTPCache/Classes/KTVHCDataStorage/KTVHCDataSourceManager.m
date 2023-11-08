@@ -33,6 +33,7 @@
 - (instancetype)initWithSources:(NSArray<id<KTVHCDataSource>> *)sources delegate:(id<KTVHCDataSourceManagerDelegate>)delegate delegateQueue:(dispatch_queue_t)delegateQueue
 {
     if (self = [super init]) {
+        self.coreLock = [[NSLock alloc] init];
         KTVHCLogAlloc(self);
         self->_sources = [sources mutableCopy];
         self->_delegate = delegate;
@@ -283,9 +284,6 @@
 
 - (void)lock
 {
-    if (!self.coreLock) {
-        self.coreLock = [[NSLock alloc] init];
-    }
     [self.coreLock lock];
 }
 
